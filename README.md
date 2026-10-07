@@ -1,5 +1,7 @@
 # WidgetFix
 
+**English** | [O'zbekcha](README.uz.md) | [Русский](README.ru.md)
+
 Long press any widget of your Flutter app in a debug build, type what is wrong, press Return. The report lands in the Claude Code session already running in your project: the widget, the line of Dart that created it, a screenshot, your words. Claude fixes the code and hot reloads the app, and a banner in the app follows the fix from queued to live.
 
 ![Long presses in the simulator send reports to Claude Code in the terminal: a shifted button, square corners, a cut-off name and a red income amount, each fixed by Claude and hot reloaded](docs/demo.gif)
