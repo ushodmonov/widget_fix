@@ -90,6 +90,22 @@ flutter run --pid-file .widget_fix/flutter.pid
 
 `flutter run` hot reloads on `SIGUSR1` and hot restarts on `SIGUSR2`. With the pid file in `.widget_fix/`, Claude reloads the app itself once the fix is written: `pkill -USR1 -F .widget_fix/flutter.pid`. That is one plain command, so the allow rule above covers it; `kill -USR1 $(cat …)` would ask every time, since Claude Code cannot check a nested command before it runs. If the [Dart MCP server](https://docs.flutter.dev/ai/mcp-server) is connected to the session instead, Claude uses its `hot_reload` tool. Without either, Claude says the change needs a hot reload and you press `r`.
 
+## Upgrading from 0.1
+
+In 0.1 every Claude Code session started a receiver, and the newest session took port 4747 over, so the app's reports went to whichever session was opened last. From 0.2 only a session in a WidgetFix project takes reports, and the first one keeps them (see [Use it](#use-it)). To upgrade:
+
+1. Update the mod:
+
+   ```bash
+   claude plugin marketplace update widget-fix
+   claude plugin update widget-fix@widget-fix
+   ```
+
+2. Close every running `claude` session. A session still on 0.1 takes the port from the new one, as 0.1 always did. Receivers left behind by closed sessions stop by themselves within a second.
+3. Start `claude` again in the Flutter project's root, the folder whose `pubspec.yaml` lists `widget_fix`. 0.1 took reports in any folder; 0.2 leaves them alone anywhere else.
+
+The app side does not change: the package, `WidgetFix.builder`, `flutter run --pid-file .widget_fix/flutter.pid`, `.widget_fix/` and the permissions stay as they are, and the app needs no `flutter pub upgrade` and no restart.
+
 ## Why `WidgetFix.builder` goes in the app's builder
 
 The package does nothing until the host runs. `MaterialApp.builder` puts it above the navigator, so it covers every route, dialog and sheet. It does five things:

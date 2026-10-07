@@ -90,6 +90,22 @@ flutter run --pid-file .widget_fix/flutter.pid
 
 `flutter run` `SIGUSR1` signalini olganda hot reload, `SIGUSR2` signalini olganda esa hot restart qiladi. Agar pid fayl `.widget_fix/` papkasida bo'lsa, Claude tuzatishni yozib bo'lgach ilovani o'zi reload qiladi: `pkill -USR1 -F .widget_fix/flutter.pid`. Bu bitta oddiy buyruq, shuning uchun yuqoridagi ruxsat qoidasi uni qamrab oladi; `kill -USR1 $(cat …)` esa har safar ruxsat so'raydi, chunki Claude Code ichma-ich joylashgan buyruqni u ishga tushishidan oldin tekshira olmaydi. Agar buning o'rniga sessiyaga [Dart MCP serveri](https://docs.flutter.dev/ai/mcp-server) ulangan bo'lsa, Claude uning `hot_reload` tool'idan foydalanadi. Ikkalasi ham bo'lmasa, Claude o'zgarish uchun hot reload kerakligini aytadi va siz `r` tugmasini bosasiz.
 
+## 0.1 dan yangilash
+
+0.1 versiyada har bir Claude Code sessiyasi o'z receiver'ini ishga tushirardi va eng yangi sessiya 4747-portni o'ziga olardi, shuning uchun ilovaning hisobotlari eng oxirgi ochilgan sessiyaga ketardi. 0.2 dan boshlab hisobotlarni faqat WidgetFix loyihasidagi sessiya qabul qiladi va ularni birinchi sessiya o'zida saqlab qoladi ([Ishlatish](#ishlatish) bo'limiga qarang). Yangilash uchun:
+
+1. Modni yangilang:
+
+   ```bash
+   claude plugin marketplace update widget-fix
+   claude plugin update widget-fix@widget-fix
+   ```
+
+2. Ishlab turgan barcha `claude` sessiyalarini yoping. Hali 0.1 da qolgan sessiya, 0.1 doim qilganidek, portni yangisidan tortib oladi. Yopilgan sessiyalardan qolgan receiver'lar bir soniya ichida o'zi to'xtaydi.
+3. `claude`'ni Flutter loyihasining ildizida, `pubspec.yaml`'ida `widget_fix` ko'rsatilgan papkada qaytadan ishga tushiring. 0.1 hisobotlarni istalgan papkada qabul qilardi; 0.2 boshqa joyda ularga tegmaydi.
+
+Ilova tomonida hech narsa o'zgarmaydi: paket, `WidgetFix.builder`, `flutter run --pid-file .widget_fix/flutter.pid`, `.widget_fix/` va ruxsatlar avvalgidek qoladi, ilovaga `flutter pub upgrade` ham, qayta ishga tushirish ham kerak emas.
+
 ## Nega `WidgetFix.builder` ilovaning builder'iga qo'yiladi
 
 Host ishga tushmaguncha paket hech narsa qilmaydi. `MaterialApp.builder` uni navigator'dan yuqoriga joylashtiradi, shuning uchun u har bir route, dialog va sheet'ni qamrab oladi. U beshta ishni bajaradi:
