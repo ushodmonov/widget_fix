@@ -1,0 +1,8 @@
+.DS_Store
+.widget_fix/
+build/
+.dart_tool/
+mod/.claude-plugin/types/
+mod/tsconfig.json
+.claude/scheduled_tasks.lock
+.claude/settings.local.json

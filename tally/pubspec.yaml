@@ -1,0 +1,29 @@
+name: tally
+description: "A wallet demo with four seeded UI bugs, for trying WidgetFix."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  widget_fix:
+    path: ../packages/widget_fix
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  fonts:
+    - family: Roboto
+      fonts:
+        - asset: fonts/Roboto.ttf
+    - family: iAWriterMono
+      fonts:
+        - asset: fonts/iAWriterMonoV.ttf
