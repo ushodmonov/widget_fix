@@ -51,7 +51,8 @@ export type FixReport = {
 }
 
 export type Receiver = {
-  state: 'starting' | 'listening' | 'failed'
+  /** `standby` while another session receives the reports. */
+  state: 'starting' | 'listening' | 'standby' | 'failed'
   detail: string
   /** Advice that stays in the pane. */
   notice?: string

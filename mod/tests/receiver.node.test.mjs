@@ -1,7 +1,8 @@
 // node --test mod/tests/*.node.test.mjs: the receiver over HTTP, as the app and the mod use it.
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:http'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
@@ -104,4 +105,107 @@ test('a Flutter web app on localhost may send one', async () => {
   assert.equal(response.headers.get('access-control-allow-origin'), origin)
   assert.deepEqual(await response.json(), { id: 'r2' })
   await nextEvent('report')
+})
+
+/**
+ * A receiver on its own port and folder, its events collected. `session` stands for the Claude Code
+ * process that starts it: a receiver started through a shell of its own has another parent, as a
+ * receiver of another session has.
+ */
+function startReceiver(port, { session = 'own', env = {} } = {}) {
+  const folder = mkdtempSync(join(tmpdir(), 'widget-fix-'))
+  const script = new URL('../server/receiver.mjs', import.meta.url).pathname
+  const argv = session === 'own' ? [process.execPath, [script]] : ['sh', ['-c', `"${process.execPath}" "${script}"; :`]]
+  const child = spawn(argv[0], argv[1], {
+    cwd: folder,
+    env: { ...process.env, WIDGET_FIX_PORT: String(port), ...env },
+    stdio: ['ignore', 'pipe', 'inherit'],
+  })
+  const seen = []
+  createInterface({ input: child.stdout }).on('line', line => seen.push(JSON.parse(line)))
+  const exited = new Promise(resolve => child.on('exit', resolve))
+
+  return {
+    folder,
+    seen,
+    exited,
+    async next(type) {
+      for (let waited = 0; waited < 5000; waited += 10) {
+        const found = seen.find(event => event.type === type)
+        if (found) return found
+        await new Promise(resolve => setTimeout(resolve, 10))
+      }
+      throw new Error(`no ${type} event`)
+    },
+    stop() {
+      child.kill()
+      rmSync(folder, { recursive: true, force: true })
+    },
+  }
+}
+
+test("a second session's receiver leaves the port to the first one", async () => {
+  const port = PORT + 100
+  const first = startReceiver(port, { session: 'first' })
+  await first.next('ready')
+  const second = startReceiver(port, { session: 'second' })
+
+  try {
+    assert.deepEqual(await second.next('busy'), { type: 'busy', cwd: realpathSync(first.folder) })
+    await second.exited
+    const owner = await (await fetch(`http://127.0.0.1:${port}/owner`)).json()
+    assert.equal(owner.cwd, realpathSync(first.folder))
+    assert.equal(first.seen.some(event => event.type === 'taken'), false)
+  } finally {
+    first.stop()
+    second.stop()
+  }
+})
+
+test('/fix-take moves the port to the session that asks, and the first one hears where', async () => {
+  const port = PORT + 101
+  const first = startReceiver(port, { session: 'first' })
+  await first.next('ready')
+  const second = startReceiver(port, { session: 'second', env: { WIDGET_FIX_TAKE: '1' } })
+
+  try {
+    await second.next('ready')
+    assert.deepEqual(await first.next('taken'), { type: 'taken', cwd: realpathSync(second.folder) })
+    await first.exited
+  } finally {
+    first.stop()
+    second.stop()
+  }
+})
+
+test("a reload of the mod replaces the session's own receiver without a word", async () => {
+  const port = PORT + 102
+  const old = startReceiver(port)
+  await old.next('ready')
+  const reloaded = startReceiver(port)
+
+  try {
+    await reloaded.next('ready')
+    await old.exited
+    assert.deepEqual(old.seen.map(event => event.type), ['ready'])
+  } finally {
+    old.stop()
+    reloaded.stop()
+  }
+})
+
+test('a program that is no receiver of ours keeps the port', async () => {
+  const port = PORT + 103
+  const other = createServer((req, res) => res.writeHead(404).end())
+  await new Promise(resolve => other.listen(port, '127.0.0.1', resolve))
+  const receiver = startReceiver(port)
+
+  try {
+    const { message } = await receiver.next('error')
+    assert.match(message, /in use by another program/)
+    assert.equal(other.listening, true)
+  } finally {
+    receiver.stop()
+    other.close()
+  }
 })

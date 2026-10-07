@@ -17,6 +17,8 @@ const now = atom({ plugin: 'widget-fix', key: 'now' } as const, 0)
 
 type ReceiverEvent =
   | { type: 'ready'; port: number }
+  | { type: 'busy'; cwd: string }
+  | { type: 'taken'; cwd: string }
   | { type: 'error'; message: string }
   | { type: 'notice'; message: string }
   | { type: 'launched'; reason: 'launch' | 'reload' }
@@ -33,12 +35,29 @@ const LOOK: Record<FixStatus, { mark: string; label: string; color: string }> = 
 const isActive = (report: FixReport) => report.status !== 'live' && report.status !== 'stopped'
 
 let cwd = ''
+// Whether the session runs in a Flutter project that depends on widget_fix; any other session
+// leaves the reports alone.
+let enabled = false
 // The report whose turn is running; its prompt was submitted by this mod.
 let current: string | null = null
+
+/** Whether the project in this folder uses WidgetFix: its pubspec.yaml lists widget_fix. */
+async function usesWidgetFix($: EngineInterface, folder: string) {
+  try {
+    return /^[ \t]+widget_fix[ \t]*:/m.test(await $.fs.read(`${folder}/pubspec.yaml`))
+  } catch {
+    return false
+  }
+}
+
+/** A folder as the pane names it: home as ~. */
+const shortPath = (path: string) => path.replace(/^\/(?:Users|home)\/[^/]+(?=\/|$)/, '~')
 
 /** Changes one report, then publishes every status for the app to poll. */
 async function patch($: EngineInterface, id: string, change: (report: FixReport) => FixReport) {
   const list = await update($, reports, all => all.map(one => (one.id === id ? change(one) : one)))
+  // Once another session took the reports, the status file is its own.
+  if ((await read($, receiver)).state === 'standby') return
   const statuses = Object.fromEntries(list.map(one => [one.id, one.status]))
   await $.fs.write(STATUS_FILE, JSON.stringify(statuses))
 }
@@ -75,9 +94,13 @@ async function launched($: EngineInterface) {
   }
 }
 
-async function listen($: EngineInterface) {
+/** Runs the receiver; `take` moves the port here from the session that holds it. */
+async function listen($: EngineInterface, take = false) {
   await update($, receiver, (): Receiver => ({ state: 'starting', detail: '' }))
-  const child = $.process.spawn({ argv: ['node', `${$.plugin.root}/server/receiver.mjs`] })
+  const child = $.process.spawn({
+    argv: ['node', `${$.plugin.root}/server/receiver.mjs`],
+    ...(take ? { env: { WIDGET_FIX_TAKE: '1' } } : {}),
+  })
   let pending = ''
 
   try {
@@ -94,6 +117,19 @@ async function listen($: EngineInterface) {
         const event = JSON.parse(line) as ReceiverEvent
         if (event.type === 'ready') {
           await update($, receiver, (): Receiver => ({ state: 'listening', detail: `127.0.0.1:${event.port}` }))
+          void $.ui.open({ id: PANE, title: TITLE })
+        } else if (event.type === 'busy' || event.type === 'taken') {
+          const where = event.cwd === '' ? 'another session' : `the session in ${shortPath(event.cwd)}`
+          await update($, receiver, (): Receiver => ({
+            state: 'standby',
+            detail: `reports go to ${where}`,
+            notice: '/fix-take moves them to this session.',
+          }))
+          $.ui.toast(
+            event.type === 'busy'
+              ? `widget-fix: reports go to ${where}; /fix-take moves them here`
+              : `widget-fix: ${where} took the reports; /fix-take takes them back`,
+          )
         } else if (event.type === 'error') {
           await update($, receiver, (): Receiver => ({ state: 'failed', detail: event.message }))
           $.ui.toast(`widget-fix: ${event.message}`)
@@ -113,20 +149,30 @@ async function listen($: EngineInterface) {
 
   // The child has exited. Say so, unless it already reported why.
   await update($, receiver, (was): Receiver =>
-    was.state === 'failed' ? was : { state: 'failed', detail: 'receiver stopped; run /reload-plugins' },
+    was.state === 'failed' || was.state === 'standby'
+      ? was
+      : { state: 'failed', detail: 'receiver stopped; run /fix-take' },
   )
 }
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     cwd = e.cwd
+    enabled = await usesWidgetFix($, e.cwd)
+    if (!enabled) {
+      return next(e)
+    }
+
     await $.command.register({
       name: 'fix-queue',
       description: 'Show the fix requests sent from the Flutter app',
     })
+    await $.command.register({
+      name: 'fix-take',
+      description: 'Receive the Flutter app\'s fix requests in this session instead of another one',
+    })
     const started = await next(e)
 
-    void $.ui.open({ id: PANE, title: TITLE })
     void listen($)
     // Keeps the elapsed seconds of a running fix ticking in the pane.
     $.clock.every(1000, () => {
@@ -142,6 +188,9 @@ export const register: Register = on => {
 
   on('prompt.compose', async ($, e, next) => {
     const composed = await next(e)
+    if (!enabled) {
+      return composed
+    }
 
     return {
       sections: [...composed.sections, { id: 'widget-fix:fix-requests', text: INSTRUCTIONS, scope: 'session' }],
@@ -152,6 +201,18 @@ export const register: Register = on => {
     await $.ui.open({ id: PANE, title: TITLE })
 
     return { text: 'Fix queue opened.' }
+  })
+
+  on('command.run', { command: 'fix-take' }, async $ => {
+    const { state } = await read($, receiver)
+    if (state === 'listening' || state === 'starting') {
+      return { text: 'This session already receives the fix requests.' }
+    }
+
+    void listen($, true)
+    await $.ui.open({ id: PANE, title: TITLE })
+
+    return { text: 'Fix requests from the app now come to this session.' }
   })
 
   // A status that fails to save must not fail the tool call itself.

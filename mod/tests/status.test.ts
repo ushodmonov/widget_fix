@@ -11,11 +11,18 @@ function receiverLines() {
   const take = () =>
     new Promise<string | null>(resolve => (queued.length > 0 ? resolve(queued.shift() ?? null) : waiting.push(resolve)))
 
+  const push = (line: string | null) => {
+    const next = waiting.shift()
+    next ? next(line) : queued.push(line)
+  }
+
   return {
     send(event: object) {
-      const line = JSON.stringify(event) + '\n'
-      const next = waiting.shift()
-      next ? next(line) : queued.push(line)
+      push(JSON.stringify(event) + '\n')
+    },
+    /** The receiver exits; the next spawn reads on from here. */
+    exit() {
+      push(null)
     },
     async *stream() {
       for (let line = await take(); line !== null; line = await take()) {
@@ -26,9 +33,14 @@ function receiverLines() {
   }
 }
 
+const PUBSPEC = 'name: tally\ndependencies:\n  flutter:\n    sdk: flutter\n  widget_fix:\n    path: ../packages/widget_fix\n'
+
 /** The world beneath the mod: a receiver the test drives, and the statuses the mod publishes. */
-function world(on: On) {
+function world(on: On, { pubspec = PUBSPEC as string | null } = {}) {
   const receiver = receiverLines()
+  const spawns: { env?: Record<string, string> }[] = []
+  const commands: string[] = []
+  const toasts: string[] = []
   const statuses: Record<string, string>[] = []
   const prompts: string[] = []
   let submitted: () => void = () => {}
@@ -36,11 +48,23 @@ function world(on: On) {
 
   mock.clock(on)
   on('session.start', async (_$, e) => ({ cwd: e.cwd }))
-  on('command.register', async (_$, e) => ({ value: { command: e.name } }))
+  on('fs.read', async (_$, e) => {
+    if (!e.path.endsWith('/pubspec.yaml') || pubspec === null) throw new Error(`ENOENT: ${e.path}`)
+    return { value: pubspec }
+  })
+  on('command.register', async (_$, e) => {
+    commands.push(e.name)
+    return { value: { command: e.name } }
+  })
+  on('command.run', async () => ({ text: '' }))
   on('ui.open', async () => ({ value: { isPlaced: true as const } }))
-  on('ui.toast', async () => ({ value: undefined }))
+  on('ui.toast', async (_$, e) => {
+    toasts.push(e.text)
+    return { value: undefined }
+  })
   on('ui.log', async () => ({ value: undefined }))
-  on('process.spawn', async function* () {
+  on('process.spawn', async function* (_$, e) {
+    spawns.push({ env: e.env })
     return yield* receiver.stream()
   })
   on('prompt.submit', async (_$, e) => {
@@ -55,7 +79,7 @@ function world(on: On) {
   on('tool.call', async () => ({ result: 'done' }))
   on('turn.complete', async () => ({ text: '' }))
 
-  return { receiver, statuses, prompts, submission }
+  return { receiver, spawns, commands, toasts, statuses, prompts, submission }
 }
 
 /** Waits until the mod has done what a receiver line asked for. */
@@ -120,4 +144,57 @@ test('without a reload the fix is not on screen', async ($, on) => {
   await $.turn.complete({ ...turnEnd, reason: 'answer' })
 
   expect(statuses.at(-1)?.r1).toBe('stopped')
+})
+
+test('a session outside a WidgetFix project leaves the reports alone', async ($, on) => {
+  const { spawns, commands } = world(on, { pubspec: null })
+  await $.session.start({ cwd: '/elsewhere', surface: 'terminal', isInteractive: true })
+
+  expect(spawns).toEqual([])
+  expect(commands).toEqual([])
+})
+
+test('a Flutter project without WidgetFix does not count', async ($, on) => {
+  const { spawns } = world(on, { pubspec: 'name: other\ndependencies:\n  flutter:\n    sdk: flutter\n' })
+  await $.session.start({ cwd: '/other', surface: 'terminal', isInteractive: true })
+
+  expect(spawns).toEqual([])
+})
+
+test('a second session stands by until /fix-take moves the reports to it', async ($, on) => {
+  const { receiver, spawns, statuses, submission } = world(on)
+  await $.session.start({ cwd: '/project', surface: 'terminal', isInteractive: true })
+  receiver.send({ type: 'busy', cwd: '/Users/me/tally' })
+  receiver.exit()
+  await until(() => spawns.length === 1)
+
+  const { text } = await $.command.run({
+    command: 'fix-take',
+    args: '',
+    origin: { kind: 'composer' },
+    presentation: { isFullscreen: false, columns: 120 },
+  })
+  expect(text).toContain('now come to this session')
+  await until(() => spawns.length === 2)
+  expect(spawns.map(one => one.env?.WIDGET_FIX_TAKE)).toEqual([undefined, '1'])
+
+  receiver.send({ type: 'ready', port: 4747 })
+  receiver.send(report)
+  await submission
+  await until(() => statuses.at(-1)?.r1 === 'fixing')
+})
+
+test('a session whose reports were taken stops publishing their statuses', async ($, on) => {
+  const { receiver, toasts, statuses, submission } = world(on)
+  await $.session.start({ cwd: '/project', surface: 'terminal', isInteractive: true })
+  receiver.send({ type: 'ready', port: 4747 })
+  receiver.send(report)
+  await submission
+  await until(() => statuses.at(-1)?.r1 === 'fixing')
+
+  receiver.send({ type: 'taken', cwd: '/Users/me/tally' })
+  await until(() => toasts.some(text => text.includes('~/tally took the reports')))
+  await $.turn.complete({ ...turnEnd, reason: 'answer' })
+
+  expect(statuses.map(all => all.r1)).toEqual(['queued', 'fixing'])
 })

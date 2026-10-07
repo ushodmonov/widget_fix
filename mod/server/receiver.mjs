@@ -1,6 +1,7 @@
 // Receives fix reports from a Flutter app's WidgetFix debug build and hands them to the widget-fix mod:
 // one JSON line on stdout per event. Started by the mod with $.process.spawn and killed with it.
-// One receiver owns the port at a time: a newer one asks the older one to leave. No dependencies:
+// One receiver owns the port at a time, and the first session to take it keeps it: a receiver from
+// another session stands by unless it was started with WIDGET_FIX_TAKE=1 (/fix-take). No dependencies:
 // the app itself tells which widget was pressed and the line that created it.
 import { createServer } from 'node:http'
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -17,16 +18,21 @@ const statusFile = join(dir, 'status.json')
 const MAX_BODY = 32 * 1024 * 1024
 // Tells this run's report ids apart from an earlier run's.
 const run = Date.now().toString(36)
+// Set by /fix-take: this session takes the port from whichever session holds it.
+const TAKE = process.env.WIDGET_FIX_TAKE === '1'
 let count = 0
 // The reports the app has been told are live, so it says "Fixed" once for each, across restarts.
 const announced = new Set()
 
 const emit = event => process.stdout.write(JSON.stringify(event) + '\n')
+// A pipe on macOS is written asynchronously: exit once the last event is out.
+const leave = (event, code) => process.stdout.write(JSON.stringify(event) + '\n', () => process.exit(code))
 const ACTIVE = new Set(['queued', 'fixing', 'reloading'])
 
 // The session that started this receiver is gone when its pipe breaks or the
 // process is handed to launchd. Without this the receiver would keep the port
-// and swallow every report meant for the next session.
+// and swallow every report meant for the next session. The parent's pid also
+// names the session: a reload of the mod starts its new receiver from the same one.
 const parent = process.ppid
 process.stdout.on('error', () => process.exit(0))
 setInterval(() => {
@@ -122,6 +128,11 @@ async function handle(req, res) {
     return reply(req, res, 200, answer(url.searchParams.get('id')))
   }
 
+  // Another session's receiver asks who holds the port before it takes it.
+  if (req.method === 'GET' && url.pathname === '/owner') {
+    return reply(req, res, 200, { app: 'widget-fix', run, session: parent, cwd: process.cwd() })
+  }
+
   // The app has launched or hot reloaded: during a fix that means the fix is on screen, however it
   // got there. The answer is the report Claude is working on (reports are worked through in
   // order), else the newest one, for the app to follow or announce.
@@ -159,12 +170,15 @@ async function handle(req, res) {
     return
   }
 
-  // A newer session's receiver asks for the port.
+  // A receiver of this session after a reload, or of another session after /fix-take, asks for the port.
   if (req.method === 'POST' && url.pathname === '/shutdown') {
+    const { session, cwd } = await readJson(req).catch(() => ({}))
     reply(req, res, 200, { run })
-    emit({ type: 'error', message: 'a newer session took over the reports' })
-    server.close(() => process.exit(0))
+    server.close()
     server.closeAllConnections()
+    // This session's mod hears where the reports went; a reload's old receiver has no one to tell.
+    if (session !== parent) leave({ type: 'taken', cwd: typeof cwd === 'string' ? cwd : '' }, 0)
+    else process.exit(0)
     return
   }
 
@@ -177,18 +191,49 @@ const server = createServer((req, res) => {
   })
 })
 
-// The port is taken by an earlier receiver: one left behind by a closed session, or the
-// one a reload of the mod is replacing. Ask it to leave, then try again.
+/**
+ * Who holds the port: a receiver's `{ session, cwd }`, `'other'` for a program that answers but is no
+ * receiver of ours, or null when nothing answers any more.
+ */
+async function holder() {
+  try {
+    const response = await fetch(`http://127.0.0.1:${PORT}/owner`)
+    const body = await response.json().catch(() => null)
+    return body?.app === 'widget-fix' ? body : 'other'
+  } catch {
+    return null
+  }
+}
+
+// The port is taken. A receiver of another session keeps it, and so does any other program, unless
+// this receiver was started to take it (/fix-take). This session's own receiver, the one a reload of
+// the mod is replacing, is asked to leave. Then we try again: an old receiver killed with the mod
+// it belonged to frees the port by itself.
 let attempts = 0
 server.on('error', error => {
   if (error.code === 'EADDRINUSE' && ++attempts <= 10) {
-    fetch(`http://127.0.0.1:${PORT}/shutdown`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
-      .catch(() => {})
-      .finally(() => setTimeout(() => server.listen(PORT, HOST), 300))
+    void (async () => {
+      const found = await holder()
+      if (found !== null && found !== 'other' && found.session !== parent && !TAKE) {
+        leave({ type: 'busy', cwd: found.cwd }, 0)
+        return
+      }
+      if (found !== null && (found !== 'other' || TAKE)) {
+        await fetch(`http://127.0.0.1:${PORT}/shutdown`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session: parent, cwd: process.cwd() }),
+        }).catch(() => {})
+      }
+      setTimeout(() => server.listen(PORT, HOST), 300)
+    })()
     return
   }
-  emit({ type: 'error', message: error.code === 'EADDRINUSE' ? `port ${PORT} is in use` : String(error) })
-  process.exit(1)
+  const message =
+    error.code === 'EADDRINUSE'
+      ? `port ${PORT} is in use by another program; /fix-take asks it to leave, WIDGET_FIX_PORT picks another`
+      : String(error)
+  leave({ type: 'error', message }, 1)
 })
 
 server.listen(PORT, HOST, () => {

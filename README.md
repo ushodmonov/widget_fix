@@ -31,7 +31,7 @@ claude plugin marketplace add ushodmonov/widget_fix
 claude plugin install widget-fix@widget-fix
 ```
 
-The mod loads in every Claude Code session from then on. It starts its receiver on `127.0.0.1:4747` when a session starts, and stops it when the session ends.
+The mod loads in every Claude Code session from then on, but only a session started in a Flutter project whose `pubspec.yaml` depends on `widget_fix` takes reports: it starts its receiver on `127.0.0.1:4747` when the session starts, and stops it when the session ends. Sessions in other folders leave the reports alone.
 
 ### 2. The package
 
@@ -145,7 +145,7 @@ Put the mark on the widget whose code you want Claude to open: the `Text` itself
 
 ## Use it
 
-1. Start `claude` in the project folder. The Fix queue pane opens in a terminal 144 columns or wider; `/fix-queue` opens it at any width.
+1. Start `claude` in the project folder. The Fix queue pane opens in a terminal 144 columns or wider; `/fix-queue` opens it at any width. When another session already receives the project's reports, this one stands by and says so; `/fix-take` moves the reports to it.
 2. Run the app in a debug build: `flutter run --pid-file .widget_fix/flutter.pid`.
 3. Long press a widget in the app, type what is wrong, press Return. Escape or a tap on the dimmed screen closes the composer.
 
@@ -179,7 +179,7 @@ When the press fires, the app hit tests the point, reads the creation locations 
 
 The receiver only takes JSON, and refuses requests from web pages other than ones served from `localhost`, so a site open in your browser cannot type prompts into the session.
 
-One session receives reports at a time: a session started later takes port 4747 over.
+One session receives reports at a time, and it keeps them: a session started later finds port 4747 taken and stands by, so a second `claude` in the same project, for a side question, does not catch the app's reports. `/fix-take` in that session moves them to it, and the first session's pane says where they went. A reload of the mod in the session that holds the port keeps it there.
 
 ## Example: Tally
 

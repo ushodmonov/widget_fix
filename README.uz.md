@@ -31,7 +31,7 @@ claude plugin marketplace add ushodmonov/widget_fix
 claude plugin install widget-fix@widget-fix
 ```
 
-Shundan so'ng mod har bir Claude Code sessiyasida yuklanadi. Sessiya boshlanganda u o'z receiver'ini `127.0.0.1:4747` manzilida ishga tushiradi, sessiya tugaganda esa uni to'xtatadi.
+Shundan so'ng mod har bir Claude Code sessiyasida yuklanadi, lekin hisobotlarni faqat `pubspec.yaml`'i `widget_fix`'ga bog'liq bo'lgan Flutter loyihasida boshlangan sessiya qabul qiladi: sessiya boshlanganda u o'z receiver'ini `127.0.0.1:4747` manzilida ishga tushiradi, sessiya tugaganda esa uni to'xtatadi. Boshqa papkalardagi sessiyalar hisobotlarga tegmaydi.
 
 ### 2. Paket
 
@@ -145,7 +145,7 @@ Belgini Claude kodini ochishini istagan widget'ga qo'ying: imlo xatosi yoki rang
 
 ## Ishlatish
 
-1. Loyiha papkasida `claude` buyrug'ini ishga tushiring. Fix queue paneli kengligi 144 ustun yoki undan katta terminalda ochiladi; `/fix-queue` uni istalgan kenglikda ochadi.
+1. Loyiha papkasida `claude` buyrug'ini ishga tushiring. Fix queue paneli kengligi 144 ustun yoki undan katta terminalda ochiladi; `/fix-queue` uni istalgan kenglikda ochadi. Agar loyiha hisobotlarini boshqa sessiya allaqachon qabul qilayotgan bo'lsa, bu sessiya kutish holatida qoladi va buni aytadi; `/fix-take` hisobotlarni shu sessiyaga o'tkazadi.
 2. Ilovani debug build'da ishga tushiring: `flutter run --pid-file .widget_fix/flutter.pid`.
 3. Ilovadagi widget'ni bosib turing, nima noto'g'ri ekanini yozing va Return tugmasini bosing. Escape tugmasi yoki xiralashgan ekranga bosish izoh oynasini yopadi.
 
@@ -179,7 +179,7 @@ Bosish ishga tushganda ilova nuqtani hit test qiladi, bosilgan widget'dan host'g
 
 Receiver faqat JSON qabul qiladi va `localhost` orqali berilgan sahifalardan boshqa veb-sahifalardan kelgan so'rovlarni rad etadi, shuning uchun brauzeringizda ochiq turgan sayt sessiyaga prompt yoza olmaydi.
 
-Bir vaqtning o'zida faqat bitta sessiya hisobot qabul qiladi: keyinroq boshlangan sessiya 4747-portni o'ziga oladi.
+Bir vaqtning o'zida faqat bitta sessiya hisobot qabul qiladi va ularni o'zida saqlab qoladi: keyinroq boshlangan sessiya 4747-port band ekanini ko'radi va kutish holatida qoladi, shuning uchun bir loyihada qo'shimcha savol uchun ochilgan ikkinchi `claude` ilovaning hisobotlarini ilib olmaydi. O'sha sessiyada `/fix-take` hisobotlarni unga o'tkazadi, birinchi sessiyaning paneli esa ular qayerga ketganini ko'rsatadi. Portni ushlab turgan sessiyada modni qayta yuklash portni o'sha sessiyada qoldiradi.
 
 ## Misol: Tally
 
