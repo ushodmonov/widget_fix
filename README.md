@@ -10,6 +10,14 @@ Long press any widget of your Flutter app in a debug build, type what is wrong, 
 
 WidgetFix is the Flutter port of [FixKit](https://github.com/ostiums/fixkit), which does the same for SwiftUI apps in the iOS simulator.
 
+The same tool, for each platform:
+
+| Platform | Project | Source |
+| --- | --- | --- |
+| Flutter | WidgetFix | https://github.com/ushodmonov/widget_fix |
+| Android (Jetpack Compose) | ComposableFix | https://github.com/ushodmonov/composable_fix |
+| iOS (SwiftUI) | FixKit | https://github.com/ostiums/fixkit |
+
 WidgetFix has two parts:
 
 - **the widget-fix mod** for Claude Code receives the reports;

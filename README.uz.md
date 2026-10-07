@@ -10,6 +10,14 @@ Flutter ilovangizning debug build'idagi istalgan widget'ni bosib turing, nima no
 
 WidgetFix — bu iOS simulyatoridagi SwiftUI ilovalari uchun xuddi shu ishni bajaradigan [FixKit](https://github.com/ostiums/fixkit) loyihasining Flutter'ga ko'chirilgan versiyasi.
 
+Har bir platforma uchun shu vosita:
+
+| Platforma | Loyiha | Manba kodi |
+| --- | --- | --- |
+| Flutter | WidgetFix | https://github.com/ushodmonov/widget_fix |
+| Android (Jetpack Compose) | ComposableFix | https://github.com/ushodmonov/composable_fix |
+| iOS (SwiftUI) | FixKit | https://github.com/ostiums/fixkit |
+
 WidgetFix ikki qismdan iborat:
 
 - Claude Code uchun **widget-fix mod** hisobotlarni qabul qiladi;

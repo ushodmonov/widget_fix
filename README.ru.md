@@ -10,6 +10,14 @@
 
 WidgetFix — это порт [FixKit](https://github.com/ostiums/fixkit) на Flutter; FixKit делает то же самое для SwiftUI-приложений в симуляторе iOS.
 
+Тот же инструмент для каждой платформы:
+
+| Платформа | Проект | Исходный код |
+| --- | --- | --- |
+| Flutter | WidgetFix | https://github.com/ushodmonov/widget_fix |
+| Android (Jetpack Compose) | ComposableFix | https://github.com/ushodmonov/composable_fix |
+| iOS (SwiftUI) | FixKit | https://github.com/ostiums/fixkit |
+
 WidgetFix состоит из двух частей:
 
 - **мод widget-fix** для Claude Code принимает отчёты;
