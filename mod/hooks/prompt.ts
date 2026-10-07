@@ -19,6 +19,19 @@ When a prompt carries that line:
 - Then put the change on screen. When .widget_fix/flutter.pid exists the app runs under \`flutter run --pid-file .widget_fix/flutter.pid\`: hot reload it with \`pkill -USR1 -F .widget_fix/flutter.pid\`, or hot restart it with \`pkill -USR2 -F .widget_fix/flutter.pid\` when the change is one a hot reload keeps out (initState, a field's initial value, a static or global initialiser, main(), an enum). When the Dart MCP server is connected, its hot_reload and hot_restart tools do the same. The report counts as fixed once the app has reloaded. When neither is there, say the change needs a hot reload: r in the terminal running flutter run.
 - Answer in one or two sentences: what was wrong and what changed.`
 
+/**
+ * `INSTRUCTIONS` for a session that runs above the Flutter project, as in a repository with the app in
+ * `mobile/`: every `.widget_fix/` path is given from the session's folder. `project` is that folder,
+ * relative to the session's, with a trailing slash, or '' when the session runs in the project itself.
+ */
+export function instructionsFor(project: string) {
+  if (project === '') return INSTRUCTIONS
+  return (
+    INSTRUCTIONS.replaceAll('.widget_fix/', `${project}.widget_fix/`) +
+    `\n\nThe Flutter project is ${project}, below this session's folder; the paths above are given from this session's folder.`
+  )
+}
+
 /** A `file://` URI or a path, relative to the project when it is inside it. */
 export function relativePath(file: string, cwd: string) {
   let path = file

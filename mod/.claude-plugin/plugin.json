@@ -1,6 +1,6 @@
 {
   "name": "widget-fix",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Long press any widget of your Flutter app in a debug build, say what is wrong, and the report lands in this session as a prompt; a pane shows the queue until the fix is live after a hot reload.",
   "author": {
     "name": "ushodmonov"

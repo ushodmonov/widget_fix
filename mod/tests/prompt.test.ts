@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import type { WidgetLocation } from '../types'
-import { describePressed, isReload, pressedLabel, promptFor, relativePath } from '../hooks/prompt'
+import { INSTRUCTIONS, describePressed, instructionsFor, isReload, pressedLabel, promptFor, relativePath } from '../hooks/prompt'
 
 const cwd = '/Users/me/tally'
 const at = (type: string, path: string, line: number): WidgetLocation => ({ type, file: `file://${cwd}/${path}`, line })
@@ -117,4 +117,14 @@ test('a signal to flutter run and the Dart MCP server reload the app, whatever i
   expect(isReload('Bash', 'pkill -F .widget_fix/flutter.pid')).toBe(false)
   expect(isReload('Bash', 'flutter analyze')).toBe(false)
   expect(isReload('mcp__dart__analyze_files')).toBe(false)
+})
+
+test('a session above the project is told the paths from its own folder', () => {
+  expect(instructionsFor('')).toBe(INSTRUCTIONS)
+
+  const above = instructionsFor('mobile-flutter/')
+  expect(above).toContain('pkill -USR1 -F mobile-flutter/.widget_fix/flutter.pid')
+  expect(above).toContain('mobile-flutter/.widget_fix/reports/<id>.json')
+  expect(above).not.toMatch(/[^/]\.widget_fix\//)
+  expect(isReload('Bash', 'pkill -USR1 -F mobile-flutter/.widget_fix/flutter.pid')).toBe(true)
 })

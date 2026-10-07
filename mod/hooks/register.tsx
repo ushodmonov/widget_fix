@@ -2,11 +2,12 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { FixReport, FixStatus, Incoming, Receiver } from '../types'
-import { INSTRUCTIONS, describePressed, isReload, pressedLabel, promptFor, sourceOf } from './prompt'
+import { describePressed, instructionsFor, isReload, pressedLabel, promptFor, relativePath, sourceOf } from './prompt'
 
 const PANE = 'fix-queue'
 const TITLE = 'Fix queue'
-const STATUS_FILE = '.widget_fix/status.json'
+// Folders a Flutter project is never found in.
+const SKIP = new Set(['build', 'node_modules', 'ios', 'android', 'macos', 'linux', 'windows', 'web', 'Pods'])
 
 const reports = atom({ plugin: 'widget-fix', key: 'reports' } as const, [])
 const receiver = atom({ plugin: 'widget-fix', key: 'receiver' } as const, {
@@ -35,9 +36,11 @@ const LOOK: Record<FixStatus, { mark: string; label: string; color: string }> = 
 const isActive = (report: FixReport) => report.status !== 'live' && report.status !== 'stopped'
 
 let cwd = ''
-// Whether the session runs in a Flutter project that depends on widget_fix; any other session
-// leaves the reports alone.
-let enabled = false
+// The Flutter project that depends on widget_fix: the session's folder, or one up to two levels
+// below it. Null in any other session, which leaves the reports alone.
+let project: string | null = null
+// The project's folder from the session's, with a trailing slash; '' when they are the same.
+let prefix = ''
 // The report whose turn is running; its prompt was submitted by this mod.
 let current: string | null = null
 
@@ -50,6 +53,27 @@ async function usesWidgetFix($: EngineInterface, folder: string) {
   }
 }
 
+/** The WidgetFix project: this folder, else the nearest one up to two levels below it. */
+async function findProject($: EngineInterface, folder: string): Promise<string | null> {
+  let level = [folder]
+  for (let depth = 0; depth <= 2; depth++) {
+    for (const candidate of level) {
+      if (await usesWidgetFix($, candidate)) return candidate
+    }
+    if (depth === 2) break
+    const below = await Promise.all(
+      level.map(async parent =>
+        (await $.fs.list(parent).catch(() => []))
+          .filter(entry => entry.kind === 'dir' && !entry.name.startsWith('.') && !SKIP.has(entry.name))
+          .map(entry => `${parent}/${entry.name}`)
+          .sort(),
+      ),
+    )
+    level = below.flat()
+  }
+  return null
+}
+
 /** A folder as the pane names it: home as ~. */
 const shortPath = (path: string) => path.replace(/^\/(?:Users|home)\/[^/]+(?=\/|$)/, '~')
 
@@ -59,10 +83,12 @@ async function patch($: EngineInterface, id: string, change: (report: FixReport)
   // Once another session took the reports, the status file is its own.
   if ((await read($, receiver)).state === 'standby') return
   const statuses = Object.fromEntries(list.map(one => [one.id, one.status]))
-  await $.fs.write(STATUS_FILE, JSON.stringify(statuses))
+  await $.fs.write(`${project}/.widget_fix/status.json`, JSON.stringify(statuses))
 }
 
-async function accept($: EngineInterface, incoming: Incoming) {
+async function accept($: EngineInterface, received: Incoming) {
+  // The receiver names the screenshot from the project's folder; Claude reads it from the session's.
+  const incoming = { ...received, screenshot: received.screenshot && prefix + received.screenshot }
   const report: FixReport = {
     id: incoming.id,
     comment: incoming.comment,
@@ -99,6 +125,8 @@ async function listen($: EngineInterface, take = false) {
   await update($, receiver, (): Receiver => ({ state: 'starting', detail: '' }))
   const child = $.process.spawn({
     argv: ['node', `${$.plugin.root}/server/receiver.mjs`],
+    // The receiver keeps .widget_fix/ in the folder it runs in, where flutter run puts its pid file.
+    cwd: project ?? cwd,
     ...(take ? { env: { WIDGET_FIX_TAKE: '1' } } : {}),
   })
   let pending = ''
@@ -158,19 +186,21 @@ async function listen($: EngineInterface, take = false) {
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     cwd = e.cwd
-    enabled = await usesWidgetFix($, e.cwd)
-    if (!enabled) {
+    project = await findProject($, e.cwd)
+    if (project === null) {
       return next(e)
     }
+    prefix = project === cwd ? '' : `${relativePath(project, cwd)}/`
 
-    await $.command.register({
-      name: 'fix-queue',
-      description: 'Show the fix requests sent from the Flutter app',
-    })
-    await $.command.register({
-      name: 'fix-take',
-      description: 'Receive the Flutter app\'s fix requests in this session instead of another one',
-    })
+    // Another plugin may hold a name; the reports still come without the command.
+    for (const command of [
+      { name: 'fix-queue', description: 'Show the fix requests sent from the Flutter app' },
+      { name: 'fix-take', description: "Receive the Flutter app's fix requests in this session instead of another one" },
+    ]) {
+      await $.command.register(command).catch((error: unknown) => {
+        $.ui.toast(`widget-fix: /${command.name} is unavailable: ${String(error)}`)
+      })
+    }
     const started = await next(e)
 
     void listen($)
@@ -188,12 +218,12 @@ export const register: Register = on => {
 
   on('prompt.compose', async ($, e, next) => {
     const composed = await next(e)
-    if (!enabled) {
+    if (project === null) {
       return composed
     }
 
     return {
-      sections: [...composed.sections, { id: 'widget-fix:fix-requests', text: INSTRUCTIONS, scope: 'session' }],
+      sections: [...composed.sections, { id: 'widget-fix:fix-requests', text: instructionsFor(prefix), scope: 'session' }],
     }
   })
 

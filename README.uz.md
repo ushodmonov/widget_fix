@@ -31,7 +31,7 @@ claude plugin marketplace add ushodmonov/widget_fix
 claude plugin install widget-fix@widget-fix
 ```
 
-Shundan so'ng mod har bir Claude Code sessiyasida yuklanadi, lekin hisobotlarni faqat `pubspec.yaml`'i `widget_fix`'ga bog'liq bo'lgan Flutter loyihasida boshlangan sessiya qabul qiladi: sessiya boshlanganda u o'z receiver'ini `127.0.0.1:4747` manzilida ishga tushiradi, sessiya tugaganda esa uni to'xtatadi. Boshqa papkalardagi sessiyalar hisobotlarga tegmaydi.
+Shundan so'ng mod har bir Claude Code sessiyasida yuklanadi, lekin hisobotlarni faqat `pubspec.yaml`'i `widget_fix`'ga bog'liq bo'lgan Flutter loyihasida yoki undan ikki darajagacha yuqoridagi papkada boshlangan sessiya qabul qiladi: sessiya boshlanganda u o'z receiver'ini `127.0.0.1:4747` manzilida ishga tushiradi, sessiya tugaganda esa uni to'xtatadi. Boshqa papkalardagi sessiyalar hisobotlarga tegmaydi.
 
 ### 2. Paket
 
@@ -68,7 +68,7 @@ Butun integratsiya shu. `CupertinoApp` va `WidgetsApp` ham xuddi shu `builder` p
 
 ### 4. Loyiha papkasi
 
-Mod hisobotlarni `claude` ishga tushirilgan papkadagi `.widget_fix/` papkasiga yozadi, shuning uchun uni Flutter loyihasining ildiz papkasida, ya'ni `pubspec.yaml` turgan papkada ishga tushiring va `.widget_fix/` papkasini `.gitignore` fayliga qo'shing. Claude skrinshotlarni ochishi va ilovani har safar ruxsat so'ramasdan reload qilishi uchun loyihaning Claude Code sozlamalarida ikkalasiga ham ruxsat bering:
+Mod hisobotlarni Flutter loyihasining ildiz papkasidagi, ya'ni `pubspec.yaml` turgan papkadagi `.widget_fix/` papkasiga yozadi; `.widget_fix/` papkasini `.gitignore` fayliga qo'shing. `claude`'ni shu papkada yoki undan ikki darajagacha yuqoridagi papkada ishga tushiring, masalan ilova `mobile/` ichida turgan repozitoriyda: mod pastdagi eng yaqin loyihani topadi va Claude'ga barcha yo'llarni sessiya papkasidan beradi (`mobile/.widget_fix/flutter.pid`). VS Code'da Claude Code extension'ining sessiyasi VS Code'da ochilgan papkada ishlaydi. Claude skrinshotlarni ochishi va ilovani har safar ruxsat so'ramasdan reload qilishi uchun loyihaning Claude Code sozlamalarida ikkalasiga ham ruxsat bering:
 
 ```json
 {
@@ -81,6 +81,8 @@ Mod hisobotlarni `claude` ishga tushirilgan papkadagi `.widget_fix/` papkasiga y
   }
 }
 ```
+
+Loyihadan yuqoridagi sessiyada yo'llar loyiha papkasi bilan yoziladi: `Read(./mobile/.widget_fix/**)`, `Bash(pkill -USR1 -F mobile/.widget_fix/flutter.pid)`.
 
 ### 5. Ilovani Claude reload qila oladigan tarzda ishga tushiring
 
@@ -102,7 +104,7 @@ flutter run --pid-file .widget_fix/flutter.pid
    ```
 
 2. Ishlab turgan barcha `claude` sessiyalarini yoping. Hali 0.1 da qolgan sessiya, 0.1 doim qilganidek, portni yangisidan tortib oladi. Yopilgan sessiyalardan qolgan receiver'lar bir soniya ichida o'zi to'xtaydi.
-3. `claude`'ni Flutter loyihasining ildizida, `pubspec.yaml`'ida `widget_fix` ko'rsatilgan papkada qaytadan ishga tushiring. 0.1 hisobotlarni istalgan papkada qabul qilardi; 0.2 boshqa joyda ularga tegmaydi.
+3. `claude`'ni Flutter loyihasining ildizida, `pubspec.yaml`'ida `widget_fix` ko'rsatilgan papkada yoki undan ikki darajagacha yuqoridagi papkada qaytadan ishga tushiring ([Loyiha papkasi](#4-loyiha-papkasi) bo'limiga qarang). 0.1 hisobotlarni istalgan papkada qabul qilardi; 0.2 boshqa joyda ularga tegmaydi.
 
 Ilova tomonida hech narsa o'zgarmaydi: paket, `WidgetFix.builder`, `flutter run --pid-file .widget_fix/flutter.pid`, `.widget_fix/` va ruxsatlar avvalgidek qoladi, ilovaga `flutter pub upgrade` ham, qayta ishga tushirish ham kerak emas.
 

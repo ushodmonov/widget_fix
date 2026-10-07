@@ -31,7 +31,7 @@ claude plugin marketplace add ushodmonov/widget_fix
 claude plugin install widget-fix@widget-fix
 ```
 
-The mod loads in every Claude Code session from then on, but only a session started in a Flutter project whose `pubspec.yaml` depends on `widget_fix` takes reports: it starts its receiver on `127.0.0.1:4747` when the session starts, and stops it when the session ends. Sessions in other folders leave the reports alone.
+The mod loads in every Claude Code session from then on, but only a session started in a Flutter project whose `pubspec.yaml` depends on `widget_fix`, or in a folder up to two levels above one, takes reports: it starts its receiver on `127.0.0.1:4747` when the session starts, and stops it when the session ends. Sessions in other folders leave the reports alone.
 
 ### 2. The package
 
@@ -68,7 +68,7 @@ That is the whole integration. `CupertinoApp` and `WidgetsApp` take the same `bu
 
 ### 4. The project folder
 
-The mod writes reports to `.widget_fix/` in the folder where `claude` runs, so start it in the Flutter project's root, the folder with `pubspec.yaml`, and add `.widget_fix/` to `.gitignore`. To let Claude open the screenshots and reload the app without asking each time, allow both in the project's Claude Code settings:
+The mod writes reports to `.widget_fix/` in the Flutter project's root, the folder with `pubspec.yaml`; add `.widget_fix/` to `.gitignore`. Start `claude` in that folder, or in a folder up to two levels above it, as in a repository with the app in `mobile/`: the mod finds the nearest project below and gives Claude every path from the session's folder (`mobile/.widget_fix/flutter.pid`). In VS Code, the Claude Code extension's session runs in the folder VS Code has open. To let Claude open the screenshots and reload the app without asking each time, allow both in the project's Claude Code settings:
 
 ```json
 {
@@ -81,6 +81,8 @@ The mod writes reports to `.widget_fix/` in the folder where `claude` runs, so s
   }
 }
 ```
+
+In a session above the project the paths carry the project's folder: `Read(./mobile/.widget_fix/**)`, `Bash(pkill -USR1 -F mobile/.widget_fix/flutter.pid)`.
 
 ### 5. Run the app so Claude can reload it
 
@@ -102,7 +104,7 @@ In 0.1 every Claude Code session started a receiver, and the newest session took
    ```
 
 2. Close every running `claude` session. A session still on 0.1 takes the port from the new one, as 0.1 always did. Receivers left behind by closed sessions stop by themselves within a second.
-3. Start `claude` again in the Flutter project's root, the folder whose `pubspec.yaml` lists `widget_fix`. 0.1 took reports in any folder; 0.2 leaves them alone anywhere else.
+3. Start `claude` again in the Flutter project's root, the folder whose `pubspec.yaml` lists `widget_fix`, or in a folder up to two levels above it (see [The project folder](#4-the-project-folder)). 0.1 took reports in any folder; 0.2 leaves them alone anywhere else.
 
 The app side does not change: the package, `WidgetFix.builder`, `flutter run --pid-file .widget_fix/flutter.pid`, `.widget_fix/` and the permissions stay as they are, and the app needs no `flutter pub upgrade` and no restart.
 

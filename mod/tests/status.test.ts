@@ -35,10 +35,14 @@ function receiverLines() {
 
 const PUBSPEC = 'name: tally\ndependencies:\n  flutter:\n    sdk: flutter\n  widget_fix:\n    path: ../packages/widget_fix\n'
 
-/** The world beneath the mod: a receiver the test drives, and the statuses the mod publishes. */
-function world(on: On, { pubspec = PUBSPEC as string | null } = {}) {
+/**
+ * The world beneath the mod: the files on disk, a receiver the test drives, and the statuses the mod
+ * publishes. `taken` names the commands another plugin registered first.
+ */
+function world(on: On, { files = { '/project/pubspec.yaml': PUBSPEC } as Record<string, string>, taken = [] as string[] } = {}) {
   const receiver = receiverLines()
-  const spawns: { env?: Record<string, string> }[] = []
+  const spawns: { cwd?: string; env?: Record<string, string> }[] = []
+  const written: string[] = []
   const commands: string[] = []
   const toasts: string[] = []
   const statuses: Record<string, string>[] = []
@@ -49,10 +53,18 @@ function world(on: On, { pubspec = PUBSPEC as string | null } = {}) {
   mock.clock(on)
   on('session.start', async (_$, e) => ({ cwd: e.cwd }))
   on('fs.read', async (_$, e) => {
-    if (!e.path.endsWith('/pubspec.yaml') || pubspec === null) throw new Error(`ENOENT: ${e.path}`)
-    return { value: pubspec }
+    const text = files[e.path]
+    if (text === undefined) throw new Error(`ENOENT: ${e.path}`)
+    return { value: text }
+  })
+  on('fs.list', async (_$, e) => {
+    const names = Object.keys(files)
+      .filter(path => path.startsWith(`${e.path}/`) && path.slice(e.path.length + 1).includes('/'))
+      .map(path => path.slice(e.path.length + 1).split('/')[0] ?? '')
+    return { value: [...new Set(names)].map(name => ({ name, kind: 'dir' as const, size: 0, mtimeMs: 0, isLink: false })) }
   })
   on('command.register', async (_$, e) => {
+    if (taken.includes(e.name)) throw new Error(`"/${e.name}" refused: another plugin registered it already`)
     commands.push(e.name)
     return { value: { command: e.name } }
   })
@@ -64,7 +76,7 @@ function world(on: On, { pubspec = PUBSPEC as string | null } = {}) {
   })
   on('ui.log', async () => ({ value: undefined }))
   on('process.spawn', async function* (_$, e) {
-    spawns.push({ env: e.env })
+    spawns.push({ cwd: e.cwd, env: e.env })
     return yield* receiver.stream()
   })
   on('prompt.submit', async (_$, e) => {
@@ -73,13 +85,14 @@ function world(on: On, { pubspec = PUBSPEC as string | null } = {}) {
     return { text: e.text }
   })
   on('fs.write', async (_$, e) => {
+    written.push(e.path)
     if (e.path.endsWith('status.json')) statuses.push(JSON.parse(e.text))
     return { value: undefined }
   })
   on('tool.call', async () => ({ result: 'done' }))
   on('turn.complete', async () => ({ text: '' }))
 
-  return { receiver, spawns, commands, toasts, statuses, prompts, submission }
+  return { receiver, spawns, written, commands, toasts, statuses, prompts, submission }
 }
 
 /** Waits until the mod has done what a receiver line asked for. */
@@ -147,7 +160,7 @@ test('without a reload the fix is not on screen', async ($, on) => {
 })
 
 test('a session outside a WidgetFix project leaves the reports alone', async ($, on) => {
-  const { spawns, commands } = world(on, { pubspec: null })
+  const { spawns, commands } = world(on, { files: { '/elsewhere/notes/todo.md': '' } })
   await $.session.start({ cwd: '/elsewhere', surface: 'terminal', isInteractive: true })
 
   expect(spawns).toEqual([])
@@ -155,7 +168,7 @@ test('a session outside a WidgetFix project leaves the reports alone', async ($,
 })
 
 test('a Flutter project without WidgetFix does not count', async ($, on) => {
-  const { spawns } = world(on, { pubspec: 'name: other\ndependencies:\n  flutter:\n    sdk: flutter\n' })
+  const { spawns } = world(on, { files: { '/other/pubspec.yaml': 'name: other\ndependencies:\n  flutter:\n    sdk: flutter\n' } })
   await $.session.start({ cwd: '/other', surface: 'terminal', isInteractive: true })
 
   expect(spawns).toEqual([])
@@ -197,4 +210,36 @@ test('a session whose reports were taken stops publishing their statuses', async
   await $.turn.complete({ ...turnEnd, reason: 'answer' })
 
   expect(statuses.map(all => all.r1)).toEqual(['queued', 'fixing'])
+})
+
+test('a session above the project finds it, and gives every path from its own folder', async ($, on) => {
+  const { receiver, spawns, written, statuses, prompts, submission } = world(on, {
+    files: { '/work/edo/web/package.json': '{}', '/work/edo/mobile-flutter/pubspec.yaml': PUBSPEC },
+  })
+  await $.session.start({ cwd: '/work/edo', surface: 'vscode', isInteractive: true })
+  await until(() => spawns.length === 1)
+  expect(spawns[0]?.cwd).toBe('/work/edo/mobile-flutter')
+
+  receiver.send({
+    type: 'report',
+    report: {
+      ...report.report,
+      screenshot: '.widget_fix/reports/r1.png',
+      chain: [{ type: 'Text', file: 'file:///work/edo/mobile-flutter/lib/home.dart', line: 12 }],
+    },
+  })
+  await submission
+  expect(prompts[0]).toContain('[fix r1] Text "+€4,650.00" · mobile-flutter/lib/home.dart:12')
+  expect(prompts[0]).toContain('mobile-flutter/.widget_fix/reports/r1.png')
+  await until(() => statuses.at(-1)?.r1 === 'fixing')
+  expect(written[0]).toBe('/work/edo/mobile-flutter/.widget_fix/status.json')
+})
+
+test("a command another plugin holds does not keep the reports away", async ($, on) => {
+  const { spawns, commands, toasts } = world(on, { taken: ['fix-queue'] })
+  await $.session.start({ cwd: '/project', surface: 'terminal', isInteractive: true })
+  await until(() => spawns.length === 1)
+
+  expect(commands).toEqual(['fix-take'])
+  expect(toasts.some(text => text.includes('/fix-queue is unavailable'))).toBe(true)
 })
