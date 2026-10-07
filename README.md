@@ -25,7 +25,7 @@ WidgetFix has two parts:
 ### 1. The mod
 
 ```bash
-claude plugin marketplace add <github-user>/widget_fix
+claude plugin marketplace add ushodmonov/widget_fix
 claude plugin install widget-fix@widget-fix
 ```
 
@@ -37,7 +37,7 @@ The mod loads in every Claude Code session from then on. It starts its receiver 
 dependencies:
   widget_fix:
     git:
-      url: https://github.com/<github-user>/widget_fix
+      url: https://github.com/ushodmonov/widget_fix
       path: packages/widget_fix
 ```
 
@@ -184,8 +184,8 @@ One session receives reports at a time: a session started later takes port 4747 
 `tally/` is the Flutter port of the SwiftUI wallet from the original FixKit, with the same four seeded UI bugs, and it depends on the package in this repository by path.
 
 ```bash
-git tag demo-start               # once, on a commit where the bugs are in place
-./scripts/reset-demo.sh          # puts the bugs back and runs Tally under flutter run
+git clone https://github.com/ushodmonov/widget_fix && cd widget_fix
+./scripts/reset-demo.sh                  # puts the bugs back and runs Tally under flutter run
 cd tally && claude --plugin-dir ../mod   # in another terminal: the mod from this checkout
 ```
 
@@ -196,7 +196,7 @@ cd tally && claude --plugin-dir ../mod   # in another terminal: the mod from thi
 | Home or Cards | the card holder name | name is cut off |
 | Home or Activity | a green-category amount such as the salary | income should be green |
 
-Each one is a one-line slip in the code. The reset script restores them from the git tag `demo-start`. It runs on the iPhone 18 Pro simulator; set `DEVICE` to name another simulator or any device `flutter devices` lists.
+Each one is a one-line slip in the code. The reset script restores them from the git tag `demo-start`, the commit they were seeded in. It runs on the iPhone 18 Pro simulator; set `DEVICE` to name another simulator or any device `flutter devices` lists.
 
 ## Scripted recordings
 

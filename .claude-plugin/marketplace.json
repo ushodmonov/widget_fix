@@ -1,7 +1,7 @@
 {
   "name": "widget-fix",
   "owner": {
-    "name": "uchqun"
+    "name": "ushodmonov"
   },
   "metadata": {
     "description": "WidgetFix: fix Flutter UI from the running app with Claude Code."
